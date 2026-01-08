@@ -1,14 +1,13 @@
-<-------------------- THIS IS EXAMPLE FILE WITH INVALID VALUES --------------------->
 {
   "project_info": {
-    "project_number": "1028176231075",
-    "project_id": "call-navigator",
-    "storage_bucket": "call-navigator.firebasestorage.app"
+    "project_number": "952844429572",
+    "project_id": "call-navigator-c80b4",
+    "storage_bucket": "call-navigator-c80b4.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:1028777231075:android:b074681486d2b6932afbe6",
+        "mobilesdk_app_id": "1:952844429572:android:ed8a0e01c78683fe154851",
         "android_client_info": {
           "package_name": "com.example.call_navigator"
         }
@@ -16,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSqDdHsm_t2RxQErWG7h-HcdIJWMJXsS5v_g"
+          "current_key": "AIzaSyBUcz9Urvm2_SGXrgRp43vf92g0pnMVoB8"
         }
       ],
       "services": {

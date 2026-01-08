@@ -62,6 +62,7 @@ public class ActiveCallActivity extends Activity {
     private boolean isSpeakerOn = false;
     private boolean isOnHold = false;
     private boolean isPostCallState = false;
+    private boolean isCallTimerRunning = false;
     private String currentState = "DIALING";
     private static final long TIMEOUT_DURATION = 300000; // 5 minutes timeout
     private boolean isLeadFound = false;
@@ -139,7 +140,8 @@ public class ActiveCallActivity extends Activity {
         
         // Only start timers if not in post-call mode
         if (!isPostCallState) {
-            startDurationTimer();
+            // Call timer will start when call connects (ACTIVE state)
+            // startDurationTimer(); // Removed - now starts on call connection
             startTimeoutTimer();
         }
         
@@ -508,6 +510,7 @@ public class ActiveCallActivity extends Activity {
         if (durationHandler != null && durationRunnable != null) {
             durationHandler.removeCallbacks(durationRunnable);
         }
+        isCallTimerRunning = false; // Reset flag for next call
     }
     
     private void startTimeoutTimer() {
@@ -628,6 +631,12 @@ public class ActiveCallActivity extends Activity {
                     break;
                 case ACTIVE:
                     hideCallWaiting();
+                    // Start timer only when call actually connects
+                    if (!isCallTimerRunning) {
+                        startDurationTimer();
+                        isCallTimerRunning = true;
+                        Log.d(TAG, "Call timer started - call connected");
+                    }
                     break;
                 case IDLE:
                     // Before finishing, double-check if there's still an active call
