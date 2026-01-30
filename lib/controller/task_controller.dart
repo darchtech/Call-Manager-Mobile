@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
 import '../model/task.dart';
@@ -24,6 +25,12 @@ class TaskController extends GetxController {
   final RxString sortBy = 'createdAt:desc'.obs;
 
   static const int pageSize = 10;
+
+  // Caching and debouncing
+  DateTime? _lastFetchTime;
+  Timer? _refreshDebounceTimer;
+  static const Duration _cacheDuration = Duration(minutes: 2);
+  static const Duration _debounceDuration = Duration(milliseconds: 500);
 
   @override
   void onInit() {
@@ -57,8 +64,18 @@ class TaskController extends GetxController {
   }
 
   /// Load tasks with pagination (first page)
-  Future<void> loadTasksPaginated({bool reset = true}) async {
+  Future<void> loadTasksPaginated({bool reset = true, bool forceRefresh = false}) async {
     print('[CONTROLLER-TaskController] 📋 Loading tasks with pagination...');
+
+    // Check cache unless force refresh is requested
+    if (!forceRefresh &&
+        !reset &&
+        _lastFetchTime != null &&
+        DateTime.now().difference(_lastFetchTime!) < _cacheDuration &&
+        tasks.isNotEmpty) {
+      print('[CONTROLLER-TaskController] 📋 Using cached tasks (last fetch: $_lastFetchTime)');
+      return;
+    }
 
     if (reset) {
       currentPage.value = 1;
@@ -88,6 +105,9 @@ class TaskController extends GetxController {
         totalPages.value = paginationData.totalPages;
         totalResults.value = paginationData.totalResults;
         hasMorePages.value = paginationData.hasNextPage;
+
+        // Update cache timestamp
+        _lastFetchTime = DateTime.now();
 
         print(
           '[CONTROLLER-TaskController] 📊 Loaded ${paginationData.results.length} tasks (page ${paginationData.page}/${paginationData.totalPages})',
@@ -165,7 +185,13 @@ class TaskController extends GetxController {
 
   /// Refresh tasks (reload first page)
   Future<void> refreshTasks() async {
-    await loadTasksPaginated(reset: true);
+    // Cancel any pending refresh to debounce rapid calls
+    _refreshDebounceTimer?.cancel();
+
+    // Debounce the refresh call
+    _refreshDebounceTimer = Timer(_debounceDuration, () async {
+      await loadTasksPaginated(reset: true, forceRefresh: true);
+    });
   }
 
   /// Set status filter and reload
@@ -286,8 +312,15 @@ class TaskController extends GetxController {
         }
       }
 
-      // Refresh the tasks list to show updated counts
-      refreshTasks();
+      // Update local task list with modified tasks (no API call needed)
+      for (final updatedTask in relatedTasks) {
+        final index = tasks.indexWhere((t) => t.id == updatedTask.id);
+        if (index != -1) {
+          tasks[index] = updatedTask;
+        }
+      }
+      // Trigger UI update
+      tasks.refresh();
     } catch (e) {
       print('[CONTROLLER-TaskController] ❌ Error updating task completion: $e');
     }
@@ -414,8 +447,15 @@ class TaskController extends GetxController {
         await _recalculateTaskCompletion(task);
       }
 
-      // Refresh the tasks list to show updated counts
-      refreshTasks();
+      // Update local task list with recalculated tasks (no API call needed)
+      for (final updatedTask in relatedTasks) {
+        final index = tasks.indexWhere((t) => t.id == updatedTask.id);
+        if (index != -1) {
+          tasks[index] = updatedTask;
+        }
+      }
+      // Trigger UI update
+      tasks.refresh();
     } catch (e) {
       print(
         '[CONTROLLER-TaskController] ❌ Error recalculating task completion: $e',
@@ -557,5 +597,11 @@ class TaskController extends GetxController {
         '[CONTROLLER-TaskController] ❌ Error recalculating all task completions: $e',
       );
     }
+  }
+
+  @override
+  void onClose() {
+    _refreshDebounceTimer?.cancel();
+    super.onClose();
   }
 }

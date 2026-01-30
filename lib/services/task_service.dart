@@ -5,6 +5,7 @@ import '../model/pagination_response.dart';
 import '../repository/task_repository.dart';
 import '../repository/lead_repository.dart';
 import '../controller/task_controller.dart';
+import '../services/auth_service.dart';
 import 'api_service.dart';
 
 class TaskService extends GetxService {
@@ -50,14 +51,39 @@ class TaskService extends GetxService {
   /// Sync tasks from server (legacy method for backward compatibility)
   Future<TaskSyncResult> syncTasksFromServer() async {
     try {
-      print('[TaskService] Fetching tasks from server');
+      // Check user role to determine which endpoint to use
+      final authService = Get.find<AuthService>();
+      final userRole = authService.user?['role'];
+      final isCaller = userRole == 'caller';
 
-      final response = await _apiService.getMyTasks();
+      print('[TaskService] Fetching tasks from server (role: $userRole)');
+
+      ApiResponse response;
+      if (isCaller) {
+        // Callers get only their tasks via /my endpoint
+        response = await _apiService.getMyTasks();
+      } else {
+        // Admins get all tasks via paginated endpoint
+        final tasksResponse = await _apiService.getTasksPaginated();
+        if (tasksResponse.isSuccess) {
+          // Convert PaginationResponse<Task> to List<Task> for backward compatibility
+          response = ApiResponse.success(tasksResponse.data!.results);
+        } else {
+          response = ApiResponse.error(tasksResponse.error ?? 'Unknown error');
+        }
+      }
 
       if (response.isSuccess) {
         int successCount = 0;
-        // Upsert tasks instead of clearing to preserve local changes
-        final tasks = response.data!;
+        List<Task> tasks;
+
+        if (isCaller) {
+          // getMyTasks returns List<Task> directly
+          tasks = response.data!;
+        } else {
+          // getTasksPaginated returns PaginationResponse<Task>
+          tasks = response.data!.results;
+        }
 
         // Get current local task IDs for comparison
         final localTasks = _taskRepo.getAllTasks();
@@ -85,7 +111,7 @@ class TaskService extends GetxService {
         // Process leads that come with the task data
         await _processTaskLeads(tasks);
 
-        print('[TaskService] Fetched $successCount tasks from server');
+        print('[TaskService] Fetched $successCount tasks from server (role: $userRole)');
 
         // Notify TaskController to refresh UI if it's registered
         if (Get.isRegistered<TaskController>()) {
@@ -118,17 +144,62 @@ class TaskService extends GetxService {
     String? sortBy,
   }) async {
     try {
+      // Check user role to determine which endpoint to use
+      final authService = Get.find<AuthService>();
+      final userRole = authService.user?['role'];
+      final isCaller = userRole == 'caller';
+
       print(
-        '[TaskService] Fetching tasks from server (page: $page, limit: $limit)',
+        '[TaskService] Fetching tasks for role: $userRole (page: $page, limit: $limit)',
       );
 
-      final response = await _apiService.getTasksPaginated(
-        page: page,
-        limit: limit,
-        status: status,
-        search: search,
-        sortBy: sortBy,
-      );
+      ApiResponse<PaginationResponse<Task>> response;
+      if (isCaller) {
+        // Callers should only see their own tasks via /my endpoint
+        // Note: /my doesn't support pagination, so we get all tasks and filter locally
+        final myTasksResponse = await _apiService.getMyTasks();
+        if (myTasksResponse.isSuccess) {
+          // Properly cast the data from Object to List<Task>
+          final List<Task> allMyTasks = (myTasksResponse.data as List<Task>?) ?? <Task>[];
+
+          // For callers, since they typically have few tasks, we can return all
+          // But apply basic pagination for consistency
+          final startIndex = (page - 1) * limit;
+          final endIndex = startIndex + limit;
+          final paginatedTasks = allMyTasks.length > startIndex
+              ? allMyTasks.sublist(
+                  startIndex,
+                  endIndex > allMyTasks.length ? allMyTasks.length : endIndex,
+                )
+              : <Task>[];
+
+          // Create pagination response manually (without invalid parameters)
+          final paginationData = PaginationResponse<Task>(
+            results: paginatedTasks,
+            page: page,
+            limit: limit,
+            totalResults: allMyTasks.length,
+            totalPages: (allMyTasks.length / limit).ceil(),
+          );
+
+          response = ApiResponse<PaginationResponse<Task>>.success(paginationData);
+        } else {
+          // Create error response with proper type
+          response = ApiResponse<PaginationResponse<Task>>.error(
+            myTasksResponse.error ?? 'Unknown error',
+            statusCode: myTasksResponse.statusCode,
+          );
+        }
+      } else {
+        // Admins/managers can see all tasks with full pagination support
+        response = await _apiService.getTasksPaginated(
+          page: page,
+          limit: limit,
+          status: status,
+          search: search,
+          sortBy: sortBy,
+        );
+      }
 
       if (response.isSuccess) {
         final paginationData = response.data!;
@@ -145,7 +216,7 @@ class TaskService extends GetxService {
         await _processTaskLeads(paginationData.results);
 
         print(
-          '[TaskService] Fetched $successCount tasks from server (page $page)',
+          '[TaskService] Fetched $successCount tasks from server (page $page, role: $userRole)',
         );
 
         return TaskPaginationResult.success(paginationData, successCount, 0);
