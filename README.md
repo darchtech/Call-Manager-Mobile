@@ -299,3 +299,12 @@ samples, guidance on mobile development, and a full API reference.
 
 ----------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------
+
+## 📚 Documentation
+
+For a detailed technical explanation of this project, see:
+
+- **[Project Overview](docs/PROJECT_OVERVIEW.md)** – Architecture, features, data flows, and directory structure
+- **[UML Class Diagram](docs/uml/class_diagram.md)** – All major classes, fields, methods, and relationships
+- **[Architecture Diagram](docs/uml/architecture_diagram.md)** – Component/layer view and offline-first data flow
+- **[Sequence Diagrams](docs/uml/sequence_diagrams.md)** – Key runtime interactions (login, call tracking, sync, FCM, tasks)
