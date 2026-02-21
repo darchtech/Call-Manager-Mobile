@@ -35,6 +35,7 @@ migrate_working_dir/
 .app dist/
 
 *.md
+!docs/**/*.md
 google-services.json
 
 # Symbolication related
